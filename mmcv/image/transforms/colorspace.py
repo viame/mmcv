@@ -1,4 +1,5 @@
 import cv2
+import numpy
 
 
 def bgr2gray(img, keepdim=False):
@@ -37,8 +38,10 @@ def convert_color_factory(src, dst):
     code = getattr(cv2, 'COLOR_{}2{}'.format(src.upper(), dst.upper()))
 
     def convert_color(img):
-        out_img = cv2.cvtColor(img, code)
-        return out_img
+        if numpy.shape(img)[2] <= 3:
+            out_img = cv2.cvtColor(img, code)
+            return out_img
+        return img
 
     convert_color.__doc__ = """Convert a {0} image to {1} image.
 

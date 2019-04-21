@@ -39,7 +39,17 @@ def imread(img_or_path, flag='color'):
         flag = imread_flags[flag] if is_str(flag) else flag
         check_file_exist(img_or_path,
                          'img file does not exist: {}'.format(img_or_path))
-        return cv2.imread(img_or_path, flag)
+        base_path, ext = osp.splitext(img_or_path)
+        if osp.exists(base_path + "_1" + ext):
+            output = cv2.imread(img_or_path, -1)
+        else:
+            output = cv2.imread(img_or_path, flag)
+        for i in range( 1, 10 ):
+            to_check = base_path + "_" + str(i) + ext
+            if not osp.exists(to_check):
+                break
+            output = np.dstack((output,cv2.imread(to_check, -1)))
+        return output
     else:
         raise TypeError('"img" must be a numpy array or a filename')
 
