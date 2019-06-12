@@ -1,6 +1,7 @@
 import os
 import os.path as osp
 import sys
+from shutil import copyfile
 from pathlib import Path
 
 import six
@@ -46,7 +47,10 @@ def mkdir_or_exist(dir_name, mode=0o777):
 def symlink(src, dst, overwrite=True, **kwargs):
     if os.path.lexists(dst) and overwrite:
         os.remove(dst)
-    os.symlink(src, dst, **kwargs)
+    if os.name == 'nt':
+        copyfile(src, dst, **kwargs)
+    else:
+        os.symlink(src, dst, **kwargs)
 
 
 def _scandir_py35(dir_path, suffix=None):
