@@ -1,4 +1,5 @@
 import logging
+import os
 import os.path as osp
 import time
 
@@ -248,8 +249,11 @@ class Runner(object):
         linkpath = osp.join(out_dir, 'latest.pth')
         optimizer = self.optimizer if save_optimizer else None
         save_checkpoint(self.model, filepath, optimizer=optimizer, meta=meta)
-        # use relative symlink
-        mmcv.symlink(filename, linkpath)
+        if os.name == 'nt':
+            mmcv.symlink(filepath, linkpath)
+        else:
+            # use relative symlink
+            mmcv.symlink(filename, linkpath)
 
     def train(self, data_loader, **kwargs):
         self.model.train()
