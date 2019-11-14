@@ -1,5 +1,6 @@
 import platform
 import sys
+import os
 from io import open  # for Python 2 (identical to builtin in Python 3)
 from setuptools import Extension, find_packages, setup, dist
 
@@ -38,6 +39,8 @@ else:
     extra_compile_args = []
     extra_link_args = []
 
+extra_include = os.path.join(os.path.dirname(os.path.dirname(sys.executable)),"include")
+
 EXT_MODULES = [
     Extension(
         name='mmcv._ext',
@@ -45,7 +48,7 @@ EXT_MODULES = [
             './mmcv/video/optflow_warp/flow_warp.cpp',
             './mmcv/video/optflow_warp/flow_warp_module.pyx'
         ],
-        include_dirs=[numpy.get_include()],
+        include_dirs=[numpy.get_include(),extra_include],
         language='c++',
         extra_compile_args=extra_compile_args,
         extra_link_args=extra_link_args,
