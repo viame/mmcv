@@ -52,13 +52,19 @@ def get_version():
 
 
 if platform.system() == 'Darwin':
+    extra_include_args = []
     extra_compile_args = ['-stdlib=libc++']
     extra_link_args = ['-stdlib=libc++']
 else:
+    extra_include_args = []
     extra_compile_args = []
     extra_link_args = []
 
-extra_include = os.path.join(os.path.dirname(os.path.dirname(sys.executable)),"include")
+if os.name == "nt":
+    extra_include_args.append( os.path.join( os.path.dirname(
+      os.path.dirname( sys.executable ) ), "include" ) )
+    extra_link_args.append( "/libpath:" + str( os.path.join( os.path.dirname(
+      os.path.dirname( sys.executable ) ), "lib" ) ) )
 
 EXT_MODULES = [
     Extension(
@@ -67,7 +73,7 @@ EXT_MODULES = [
             './mmcv/video/optflow_warp/flow_warp.cpp',
             './mmcv/video/optflow_warp/flow_warp_module.pyx'
         ],
-        include_dirs=[numpy.get_include(),extra_include],
+        include_dirs=[numpy.get_include(),extra_include_args],
         language='c++',
         extra_compile_args=extra_compile_args,
         extra_link_args=extra_link_args,
