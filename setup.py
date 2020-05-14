@@ -2,6 +2,7 @@ import platform
 import re
 import sys
 import os
+
 from io import open  # for Python 2 (identical to builtin in Python 3)
 from pkg_resources import DistributionNotFound, get_distribution
 from setuptools import Extension, dist, find_packages, setup
@@ -25,11 +26,7 @@ def choose_requirement(primary, secondary):
     return str(primary)
 
 
-install_requires = ['addict', 'numpy', 'pyyaml', 'six']
-
-if sys.version_info < (3, ):
-    install_requires.extend(
-        ['backports.shutil_get_terminal_size', 'enum34', 'pathlib'])
+install_requires = ['addict', 'numpy', 'pyyaml']
 
 # If first not installed install second package
 CHOOSE_INSTALL_REQUIRES = [('opencv-python-headless>=3', 'opencv-python>=3')]
@@ -91,12 +88,11 @@ setup(
         'Development Status :: 4 - Beta',
         'License :: OSI Approved :: Apache Software License',
         'Operating System :: OS Independent',
-        'Programming Language :: Python :: 2',
-        'Programming Language :: Python :: 2.7',
         'Programming Language :: Python :: 3',
         'Programming Language :: Python :: 3.5',
         'Programming Language :: Python :: 3.6',
         'Programming Language :: Python :: 3.7',
+        'Programming Language :: Python :: 3.8',
         'Topic :: Utilities',
     ],
     url='https://github.com/open-mmlab/mmcv',

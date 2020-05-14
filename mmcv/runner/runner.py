@@ -7,11 +7,9 @@ import time
 import torch
 
 import mmcv
-from . import hooks
 from .checkpoint import load_checkpoint, save_checkpoint
 from .dist_utils import get_dist_info
-from .hooks import (CheckpointHook, Hook, IterTimerHook, LrUpdaterHook,
-                    OptimizerHook, lr_updater)
+from .hooks import HOOKS, Hook, IterTimerHook
 from .log_buffer import LogBuffer
 from .priority import get_priority
 from .utils import get_host_info, get_time_str, obj_from_dict
@@ -154,7 +152,7 @@ class Runner(object):
         elif not isinstance(optimizer, torch.optim.Optimizer):
             raise TypeError(
                 'optimizer must be either an Optimizer object or a dict, '
-                'but got {}'.format(type(optimizer)))
+                f'but got {type(optimizer)}')
         return optimizer
 
     def _add_file_handler(self,
@@ -185,7 +183,7 @@ class Runner(object):
             format='%(asctime)s - %(levelname)s - %(message)s', level=level)
         logger = logging.getLogger(__name__)
         if log_dir and self.rank == 0:
-            filename = '{}.log'.format(self.timestamp)
+            filename = f'{self.timestamp}.log'
             log_file = osp.join(log_dir, filename)
             self._add_file_handler(logger, log_file, level=level)
         return logger
@@ -200,6 +198,25 @@ class Runner(object):
             raise RuntimeError(
                 'lr is not applicable because optimizer does not exist.')
         return [group['lr'] for group in self.optimizer.param_groups]
+
+    def current_momentum(self):
+        """Get current momentums.
+
+        Returns:
+            list: Current momentum of all param groups.
+        """
+        if self.optimizer is None:
+            raise RuntimeError(
+                'momentum is not applicable because optimizer does not exist.')
+        momentums = []
+        for group in self.optimizer.param_groups:
+            if 'momentum' in group.keys():
+                momentums.append(group['momentum'])
+            elif 'betas' in group.keys():
+                momentums.append(group['betas'][0])
+            else:
+                momentums.append(0)
+        return momentums
 
     def register_hook(self, hook, priority='NORMAL'):
         """Register a hook into the hook list.
@@ -223,16 +240,6 @@ class Runner(object):
                 break
         if not inserted:
             self._hooks.insert(0, hook)
-
-    def build_hook(self, args, hook_type=None):
-        if isinstance(args, Hook):
-            return args
-        elif isinstance(args, dict):
-            assert issubclass(hook_type, Hook)
-            return hook_type(**args)
-        else:
-            raise TypeError('"args" must be either a Hook object'
-                            ' or dict, not {}'.format(type(args)))
 
     def call_hook(self, fn_name):
         for hook in self._hooks:
@@ -267,7 +274,7 @@ class Runner(object):
         self.model.train()
         self.mode = 'train'
         self.data_loader = data_loader
-        self._max_iters = self._max_epochs * len(data_loader)
+
         self.call_hook('before_train_epoch')
         for i, data_batch in enumerate(data_loader):
             self._inner_iter = i
@@ -345,6 +352,12 @@ class Runner(object):
         assert len(data_loaders) == len(workflow)
 
         self._max_epochs = max_epochs
+        for i, flow in enumerate(workflow):
+            mode, epochs = flow
+            if mode == 'train':
+                self._max_iters = self._max_epochs * len(data_loaders[i])
+                break
+
         work_dir = self.work_dir if self.work_dir is not None else 'NONE'
         self.logger.info('Start running, host: %s, work_dir: %s',
                          get_host_info(), work_dir)
@@ -357,15 +370,14 @@ class Runner(object):
                 if isinstance(mode, str):  # self.train()
                     if not hasattr(self, mode):
                         raise ValueError(
-                            'runner has no method named "{}" to run an epoch'.
-                            format(mode))
+                            f'runner has no method named "{mode}" to run an '
+                            'epoch')
                     epoch_runner = getattr(self, mode)
                 elif callable(mode):  # custom train()
                     epoch_runner = mode
                 else:
                     raise TypeError('mode in workflow must be a str or '
-                                    'callable function, not {}'.format(
-                                        type(mode)))
+                                    f'callable function, not {type(mode)}')
                 for _ in range(epochs):
                     if mode == 'train' and self.epoch >= max_epochs:
                         return
@@ -374,50 +386,91 @@ class Runner(object):
         time.sleep(1)  # wait for some hooks like loggers to finish
         self.call_hook('after_run')
 
-    def register_lr_hooks(self, lr_config):
-        if isinstance(lr_config, LrUpdaterHook):
-            self.register_hook(lr_config)
-        elif isinstance(lr_config, dict):
+    def register_lr_hook(self, lr_config):
+        if isinstance(lr_config, dict):
             assert 'policy' in lr_config
-            # from .hooks import lr_updater
-            hook_name = lr_config['policy'].title() + 'LrUpdaterHook'
-            if not hasattr(lr_updater, hook_name):
-                raise ValueError('"{}" does not exist'.format(hook_name))
-            hook_cls = getattr(lr_updater, hook_name)
-            self.register_hook(hook_cls(**lr_config))
+            policy_type = lr_config.pop('policy')
+            # If the type of policy is all in lower case, e.g., 'cyclic',
+            # then its first letter will be capitalized, e.g., to be 'Cyclic'.
+            # This is for the convenient usage of Lr updater updater.
+            # Since this is not applicable for `CosineAnealingLrUpdater`,
+            # the string will not be changed if it contains capital letters.
+            if policy_type == policy_type.lower():
+                policy_type = policy_type.title()
+            hook_type = policy_type + 'LrUpdaterHook'
+            lr_config['type'] = hook_type
+            hook = mmcv.build_from_cfg(lr_config, HOOKS)
         else:
-            raise TypeError('"lr_config" must be either a LrUpdaterHook object'
-                            ' or dict, not {}'.format(type(lr_config)))
+            hook = lr_config
+        self.register_hook(hook)
+
+    def register_optimizer_hook(self, optimizer_config):
+        if optimizer_config is None:
+            return
+        if isinstance(optimizer_config, dict):
+            optimizer_config.setdefault('type', 'OptimizerHook')
+            hook = mmcv.build_from_cfg(optimizer_config, HOOKS)
+        else:
+            hook = optimizer_config
+        self.register_hook(hook)
+
+    def register_checkpoint_hook(self, checkpoint_config):
+        if checkpoint_config is None:
+            return
+        if isinstance(checkpoint_config, dict):
+            checkpoint_config.setdefault('type', 'CheckpointHook')
+            hook = mmcv.build_from_cfg(checkpoint_config, HOOKS)
+        else:
+            hook = checkpoint_config
+        self.register_hook(hook)
+
+    def register_momentum_hook(self, momentum_config):
+        if momentum_config is None:
+            return
+        if isinstance(momentum_config, dict):
+            assert 'policy' in momentum_config
+            policy_type = momentum_config.pop('policy')
+            # If the type of policy is all in lower case, e.g., 'cyclic',
+            # then its first letter will be capitalized, e.g., to be 'Cyclic'.
+            # This is for the convenient usage of momentum updater.
+            # Since this is not applicable for `CosineAnealingMomentumUpdater`,
+            # the string will not be changed if it contains capital letters.
+            if policy_type == policy_type.lower():
+                policy_type = policy_type.title()
+            hook_type = policy_type + 'MomentumUpdaterHook'
+            momentum_config['type'] = hook_type
+            hook = mmcv.build_from_cfg(momentum_config, HOOKS)
+        else:
+            hook = momentum_config
+        self.register_hook(hook)
 
     def register_logger_hooks(self, log_config):
         log_interval = log_config['interval']
         for info in log_config['hooks']:
-            logger_hook = obj_from_dict(
-                info, hooks, default_args=dict(interval=log_interval))
+            logger_hook = mmcv.build_from_cfg(
+                info, HOOKS, default_args=dict(interval=log_interval))
             self.register_hook(logger_hook, priority='VERY_LOW')
 
     def register_training_hooks(self,
                                 lr_config,
                                 optimizer_config=None,
                                 checkpoint_config=None,
-                                log_config=None):
+                                log_config=None,
+                                momentum_config=None):
         """Register default hooks for training.
 
         Default hooks include:
 
         - LrUpdaterHook
+        - MomentumUpdaterHook
         - OptimizerStepperHook
         - CheckpointSaverHook
         - IterTimerHook
         - LoggerHook(s)
         """
-        if optimizer_config is None:
-            optimizer_config = {}
-        if checkpoint_config is None:
-            checkpoint_config = {}
-        self.register_lr_hooks(lr_config)
-        self.register_hook(self.build_hook(optimizer_config, OptimizerHook))
-        self.register_hook(self.build_hook(checkpoint_config, CheckpointHook))
+        self.register_lr_hook(lr_config)
+        self.register_momentum_hook(momentum_config)
+        self.register_optimizer_hook(optimizer_config)
+        self.register_checkpoint_hook(checkpoint_config)
         self.register_hook(IterTimerHook())
-        if log_config is not None:
-            self.register_logger_hooks(log_config)
+        self.register_logger_hooks(log_config)

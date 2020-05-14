@@ -1,4 +1,4 @@
 addict
 numpy
 pyyaml
-six
+yapf

@@ -1,20 +1,23 @@
 # Copyright (c) Open-MMLab. All rights reserved.
 import numbers
 
-from ...dist_utils import master_only
+from mmcv.runner import master_only
+from ..hook import HOOKS
 from .base import LoggerHook
 
 
+@HOOKS.register_module()
 class WandbLoggerHook(LoggerHook):
 
     def __init__(self,
-                 log_dir=None,
+                 init_kwargs=None,
                  interval=10,
                  ignore_last=True,
                  reset_flag=True):
         super(WandbLoggerHook, self).__init__(interval, ignore_last,
                                               reset_flag)
         self.import_wandb()
+        self.init_kwargs = init_kwargs
 
     def import_wandb(self):
         try:
@@ -28,7 +31,10 @@ class WandbLoggerHook(LoggerHook):
     def before_run(self, runner):
         if self.wandb is None:
             self.import_wandb()
-        self.wandb.init()
+        if self.init_kwargs:
+            self.wandb.init(**self.init_kwargs)
+        else:
+            self.wandb.init()
 
     @master_only
     def log(self, runner):
@@ -36,10 +42,11 @@ class WandbLoggerHook(LoggerHook):
         for var, val in runner.log_buffer.output.items():
             if var in ['time', 'data_time']:
                 continue
-            tag = '{}/{}'.format(var, runner.mode)
-            runner.log_buffer.output[var]
+            tag = f'{var}/{runner.mode}'
             if isinstance(val, numbers.Number):
                 metrics[tag] = val
+        metrics['learning_rate'] = runner.current_lr()[0]
+        metrics['momentum'] = runner.current_momentum()[0]
         if metrics:
             self.wandb.log(metrics, step=runner.iter)
 

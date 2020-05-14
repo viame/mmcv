@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 #
 # Configuration file for the Sphinx documentation builder.
 #
@@ -49,9 +48,7 @@ extensions = [
     'recommonmark',
 ]
 
-autodoc_mock_imports = [
-    'cv2', 'numpy', 'torch', 'enum', 'pathlib', 'mmcv._ext'
-]
+autodoc_mock_imports = ['cv2', 'mmcv._ext', 'torchvision']
 
 # Add any paths that contain templates here, relative to this directory.
 templates_path = ['_templates']
