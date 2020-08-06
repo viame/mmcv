@@ -4,8 +4,7 @@ from torch.nn.parallel._functions import _get_stream
 
 
 def scatter(input, devices, streams=None):
-    """Scatters tensor across multiple GPUs.
-    """
+    """Scatters tensor across multiple GPUs."""
     if streams is None:
         streams = [None] * len(devices)
 
@@ -57,7 +56,7 @@ def get_input_device(input):
         raise Exception(f'Unknown type {type(input)}.')
 
 
-class Scatter(object):
+class Scatter:
 
     @staticmethod
     def forward(target_gpus, input):

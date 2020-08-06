@@ -5,11 +5,11 @@ import torch.nn as nn
 import torch.utils.checkpoint as cp
 
 from ..runner import load_checkpoint
-from .weight_init import constant_init, kaiming_init
+from .utils import constant_init, kaiming_init
 
 
 def conv3x3(in_planes, out_planes, stride=1, dilation=1):
-    """3x3 convolution with padding"""
+    """3x3 convolution with padding."""
     return nn.Conv2d(
         in_planes,
         out_planes,
@@ -32,6 +32,7 @@ class BasicBlock(nn.Module):
                  style='pytorch',
                  with_cp=False):
         super(BasicBlock, self).__init__()
+        assert style in ['pytorch', 'caffe']
         self.conv1 = conv3x3(inplanes, planes, stride, dilation)
         self.bn1 = nn.BatchNorm2d(planes)
         self.relu = nn.ReLU(inplace=True)
@@ -74,8 +75,8 @@ class Bottleneck(nn.Module):
                  with_cp=False):
         """Bottleneck block.
 
-        If style is "pytorch", the stride-two layer is the 3x3 conv layer,
-        if it is "caffe", the stride-two layer is the first 1x1 conv layer.
+        If style is "pytorch", the stride-two layer is the 3x3 conv layer, if
+        it is "caffe", the stride-two layer is the first 1x1 conv layer.
         """
         super(Bottleneck, self).__init__()
         assert style in ['pytorch', 'caffe']
@@ -171,7 +172,7 @@ def make_res_layer(block,
             style=style,
             with_cp=with_cp))
     inplanes = planes * block.expansion
-    for i in range(1, blocks):
+    for _ in range(1, blocks):
         layers.append(
             block(inplanes, planes, 1, dilation, style=style, with_cp=with_cp))
 

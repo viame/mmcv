@@ -4,7 +4,7 @@ import pytest
 import torch
 import torch.nn as nn
 
-from mmcv.cnn.bricks import CONV_LAYERS, ConvModule
+from mmcv.cnn.bricks import CONV_LAYERS, ConvModule, HSigmoid, HSwish
 
 
 @CONV_LAYERS.register_module()
@@ -114,6 +114,36 @@ def test_conv_module():
     # leaky relu
     conv = ConvModule(3, 8, 3, padding=1, act_cfg=dict(type='LeakyReLU'))
     assert isinstance(conv.activate, nn.LeakyReLU)
+    output = conv(x)
+    assert output.shape == (1, 8, 256, 256)
+
+    # tanh
+    conv = ConvModule(3, 8, 3, padding=1, act_cfg=dict(type='Tanh'))
+    assert isinstance(conv.activate, nn.Tanh)
+    output = conv(x)
+    assert output.shape == (1, 8, 256, 256)
+
+    # Sigmoid
+    conv = ConvModule(3, 8, 3, padding=1, act_cfg=dict(type='Sigmoid'))
+    assert isinstance(conv.activate, nn.Sigmoid)
+    output = conv(x)
+    assert output.shape == (1, 8, 256, 256)
+
+    # PReLU
+    conv = ConvModule(3, 8, 3, padding=1, act_cfg=dict(type='PReLU'))
+    assert isinstance(conv.activate, nn.PReLU)
+    output = conv(x)
+    assert output.shape == (1, 8, 256, 256)
+
+    # HSwish
+    conv = ConvModule(3, 8, 3, padding=1, act_cfg=dict(type='HSwish'))
+    assert isinstance(conv.activate, HSwish)
+    output = conv(x)
+    assert output.shape == (1, 8, 256, 256)
+
+    # HSigmoid
+    conv = ConvModule(3, 8, 3, padding=1, act_cfg=dict(type='HSigmoid'))
+    assert isinstance(conv.activate, HSigmoid)
     output = conv(x)
     assert output.shape == (1, 8, 256, 256)
 

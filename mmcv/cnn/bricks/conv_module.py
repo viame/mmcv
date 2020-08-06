@@ -2,13 +2,15 @@ import warnings
 
 import torch.nn as nn
 
-from ..weight_init import constant_init, kaiming_init
+from ..utils import constant_init, kaiming_init
 from .activation import build_activation_layer
 from .conv import build_conv_layer
 from .norm import build_norm_layer
 from .padding import build_padding_layer
+from .registry import PLUGIN_LAYERS
 
 
+@PLUGIN_LAYERS.register_module()
 class ConvModule(nn.Module):
     """A conv block that bundles conv/norm/activation layers.
 
@@ -54,6 +56,8 @@ class ConvModule(nn.Module):
             Default: ('conv', 'norm', 'act').
     """
 
+    _abbr_ = 'conv_block'
+
     def __init__(self,
                  in_channels,
                  out_channels,
@@ -89,7 +93,7 @@ class ConvModule(nn.Module):
         self.with_activation = act_cfg is not None
         # if the conv layer is before a norm layer, bias is unnecessary.
         if bias == 'auto':
-            bias = False if self.with_norm else True
+            bias = not self.with_norm
         self.with_bias = bias
 
         if self.with_norm and self.with_bias:
@@ -139,7 +143,11 @@ class ConvModule(nn.Module):
         # build activation layer
         if self.with_activation:
             act_cfg_ = act_cfg.copy()
-            act_cfg_.setdefault('inplace', inplace)
+            # nn.Tanh has no 'inplace' argument
+            if act_cfg_['type'] not in [
+                    'Tanh', 'PReLU', 'Sigmoid', 'HSigmoid'
+            ]:
+                act_cfg_.setdefault('inplace', inplace)
             self.activate = build_activation_layer(act_cfg_)
 
         # Use msra init by default

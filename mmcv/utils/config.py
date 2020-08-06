@@ -1,5 +1,7 @@
 # Copyright (c) Open-MMLab. All rights reserved.
+import ast
 import os.path as osp
+import platform
 import shutil
 import sys
 import tempfile
@@ -12,8 +14,14 @@ from yapf.yapflib.yapf_api import FormatCode
 
 from .path import check_file_exist
 
+if platform.system() == 'Windows':
+    import regex as re
+else:
+    import re
+
 BASE_KEY = '_base_'
 DELETE_KEY = '_delete_'
+RESERVED_KEYS = ['filename', 'text', 'pretty_text']
 
 
 class ConfigDict(Dict):
@@ -53,7 +61,7 @@ def add_args(parser, cfg, prefix=''):
     return parser
 
 
-class Config(object):
+class Config:
     """A facility for config and config files.
 
     It supports common file formats as configs: python/json/yaml. The interface
@@ -76,22 +84,61 @@ class Config(object):
         >>> cfg
         "Config [path: /home/kchen/projects/mmcv/tests/data/config/a.py]: "
         "{'item1': [1, 2], 'item2': {'a': 0}, 'item3': True, 'item4': 'test'}"
-
     """
 
     @staticmethod
-    def _file2dict(filename):
+    def _validate_py_syntax(filename):
+        with open(filename) as f:
+            content = f.read()
+        try:
+            ast.parse(content)
+        except SyntaxError as e:
+            raise SyntaxError('There are syntax errors in config '
+                              f'file {filename}: {e}')
+
+    @staticmethod
+    def _substitute_predefined_vars(filename, temp_config_name):
+        file_dirname = osp.dirname(filename)
+        file_basename = osp.basename(filename)
+        file_basename_no_extension = osp.splitext(file_basename)[0]
+        file_extname = osp.splitext(filename)[1]
+        support_templates = dict(
+            fileDirname=file_dirname,
+            fileBasename=file_basename,
+            fileBasenameNoExtension=file_basename_no_extension,
+            fileExtname=file_extname)
+        config_file = open(filename).read()
+        for key, value in support_templates.items():
+            regexp = r'\{\{\s*' + str(key) + r'\s*\}\}'
+            config_file = re.sub(regexp, value, config_file)
+        with open(temp_config_name, 'w') as tmp_config_file:
+            tmp_config_file.write(config_file)
+
+    @staticmethod
+    def _file2dict(filename, use_predefined_variables=True):
         filename = osp.abspath(osp.expanduser(filename))
         check_file_exist(filename)
-        if filename.endswith('.py'):
-            with tempfile.TemporaryDirectory() as temp_config_dir:
-                temp_config_file = tempfile.NamedTemporaryFile(
-                    dir=temp_config_dir, suffix='.py')
-                temp_config_name = osp.basename(temp_config_file.name)
-                shutil.copyfile(filename,
-                                osp.join(temp_config_dir, temp_config_name))
+        fileExtname = osp.splitext(filename)[1]
+        if fileExtname not in ['.py', '.json', '.yaml', 'yml']:
+            raise IOError('Only py/yml/yaml/json type are supported now!')
+
+        with tempfile.TemporaryDirectory() as temp_config_dir:
+            temp_config_file = tempfile.NamedTemporaryFile(
+                dir=temp_config_dir, suffix=fileExtname)
+            if platform.system() == 'Windows':
+                temp_config_file.close()
+            temp_config_name = osp.basename(temp_config_file.name)
+            # Substitute predefined variables
+            if use_predefined_variables:
+                Config._substitute_predefined_vars(filename,
+                                                   temp_config_file.name)
+            else:
+                shutil.copyfile(filename, temp_config_file.name)
+
+            if filename.endswith('.py'):
                 temp_module_name = osp.splitext(temp_config_name)[0]
                 sys.path.insert(0, temp_config_dir)
+                Config._validate_py_syntax(filename)
                 mod = import_module(temp_module_name)
                 sys.path.pop(0)
                 cfg_dict = {
@@ -101,13 +148,11 @@ class Config(object):
                 }
                 # delete imported module
                 del sys.modules[temp_module_name]
-                # close temp file
-                temp_config_file.close()
-        elif filename.endswith(('.yml', '.yaml', '.json')):
-            import mmcv
-            cfg_dict = mmcv.load(filename)
-        else:
-            raise IOError('Only py/yml/yaml/json type are supported now!')
+            elif filename.endswith(('.yml', '.yaml', '.json')):
+                import mmcv
+                cfg_dict = mmcv.load(temp_config_file.name)
+            # close temp file
+            temp_config_file.close()
 
         cfg_text = filename + '\n'
         with open(filename, 'r') as f:
@@ -161,14 +206,14 @@ class Config(object):
         return b
 
     @staticmethod
-    def fromfile(filename):
-        cfg_dict, cfg_text = Config._file2dict(filename)
+    def fromfile(filename, use_predefined_variables=True):
+        cfg_dict, cfg_text = Config._file2dict(filename,
+                                               use_predefined_variables)
         return Config(cfg_dict, cfg_text=cfg_text, filename=filename)
 
     @staticmethod
     def auto_argparser(description=None):
-        """Generate argparser from config file automatically (experimental)
-        """
+        """Generate argparser from config file automatically (experimental)"""
         partial_parser = ArgumentParser(description=description)
         partial_parser.add_argument('config', help='config file path')
         cfg_file = partial_parser.parse_known_args()[0].config
@@ -184,6 +229,9 @@ class Config(object):
         elif not isinstance(cfg_dict, dict):
             raise TypeError('cfg_dict must be a dict, but '
                             f'got {type(cfg_dict)}')
+        for key in cfg_dict:
+            if key in RESERVED_KEYS:
+                raise KeyError(f'{key} is reserved for config file')
 
         super(Config, self).__setattr__('_cfg_dict', ConfigDict(cfg_dict))
         super(Config, self).__setattr__('_filename', filename)
@@ -219,46 +267,72 @@ class Config(object):
             s = first + '\n' + s
             return s
 
-        def _format_basic_types(k, v):
+        def _format_basic_types(k, v, use_mapping=False):
             if isinstance(v, str):
                 v_str = f"'{v}'"
             else:
                 v_str = str(v)
-            attr_str = f'{str(k)}={v_str}'
+
+            if use_mapping:
+                k_str = f"'{k}'" if isinstance(k, str) else str(k)
+                attr_str = f'{k_str}: {v_str}'
+            else:
+                attr_str = f'{str(k)}={v_str}'
             attr_str = _indent(attr_str, indent)
 
             return attr_str
 
-        def _format_list(k, v):
+        def _format_list(k, v, use_mapping=False):
             # check if all items in the list are dict
             if all(isinstance(_, dict) for _ in v):
                 v_str = '[\n'
                 v_str += '\n'.join(
                     f'dict({_indent(_format_dict(v_), indent)}),'
                     for v_ in v).rstrip(',')
-                attr_str = f'{str(k)}={v_str}'
+                if use_mapping:
+                    k_str = f"'{k}'" if isinstance(k, str) else str(k)
+                    attr_str = f'{k_str}: {v_str}'
+                else:
+                    attr_str = f'{str(k)}={v_str}'
                 attr_str = _indent(attr_str, indent) + ']'
             else:
-                attr_str = _format_basic_types(k, v)
+                attr_str = _format_basic_types(k, v, use_mapping)
             return attr_str
 
-        def _format_dict(d, outest_level=False):
+        def _contain_invalid_identifier(dict_str):
+            contain_invalid_identifier = False
+            for key_name in dict_str:
+                contain_invalid_identifier |= \
+                    (not str(key_name).isidentifier())
+            return contain_invalid_identifier
+
+        def _format_dict(input_dict, outest_level=False):
             r = ''
             s = []
-            for idx, (k, v) in enumerate(d.items()):
-                is_last = idx >= len(d) - 1
+
+            use_mapping = _contain_invalid_identifier(input_dict)
+            if use_mapping:
+                r += '{'
+            for idx, (k, v) in enumerate(input_dict.items()):
+                is_last = idx >= len(input_dict) - 1
                 end = '' if outest_level or is_last else ','
                 if isinstance(v, dict):
                     v_str = '\n' + _format_dict(v)
-                    attr_str = f'{str(k)}=dict({v_str}'
+                    if use_mapping:
+                        k_str = f"'{k}'" if isinstance(k, str) else str(k)
+                        attr_str = f'{k_str}: dict({v_str}'
+                    else:
+                        attr_str = f'{str(k)}=dict({v_str}'
                     attr_str = _indent(attr_str, indent) + ')' + end
                 elif isinstance(v, list):
-                    attr_str = _format_list(k, v) + end
+                    attr_str = _format_list(k, v, use_mapping) + end
                 else:
-                    attr_str = _format_basic_types(k, v) + end
+                    attr_str = _format_basic_types(k, v, use_mapping) + end
 
                 s.append(attr_str)
             r += '\n'.join(s)
+            if use_mapping:
+                r += '}'
             return r
 
         cfg_dict = self._cfg_dict.to_dict()
@@ -314,7 +388,7 @@ class Config(object):
                 mmcv.dump(cfg_dict, file)
 
     def merge_from_dict(self, options):
-        """Merge list into cfg_dict
+        """Merge list into cfg_dict.
 
         Merge the dict parsed by MultipleKVAction into this cfg.
 

@@ -4,11 +4,11 @@ import logging
 import torch.nn as nn
 
 from ..runner import load_checkpoint
-from .weight_init import constant_init, kaiming_init, normal_init
+from .utils import constant_init, kaiming_init, normal_init
 
 
 def conv3x3(in_planes, out_planes, dilation=1):
-    """3x3 convolution with padding"""
+    """3x3 convolution with padding."""
     return nn.Conv2d(
         in_planes,
         out_planes,
@@ -141,7 +141,7 @@ class VGG(nn.Module):
     def forward(self, x):
         outs = []
         vgg_layers = getattr(self, self.module_name)
-        for i, num_blocks in enumerate(self.stage_blocks):
+        for i in range(len(self.stage_blocks)):
             for j in range(*self.range_sub_modules[i]):
                 vgg_layer = vgg_layers[j]
                 x = vgg_layer(x)
