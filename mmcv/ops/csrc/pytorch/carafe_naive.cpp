@@ -1,13 +1,13 @@
 #include "pytorch_cpp_helper.hpp"
 
 #ifdef MMCV_WITH_CUDA
-void CARAFENAIVEForwardCUDAKernelLauncher(const Tensor features,
-                                          const Tensor masks, Tensor output,
-                                          const int kernel_size,
-                                          const int group_size,
-                                          const int scale_factor);
+int CARAFENAIVEForwardCUDAKernelLauncher(const Tensor features,
+                                         const Tensor masks, Tensor output,
+                                         const int kernel_size,
+                                         const int group_size,
+                                         const int scale_factor);
 
-void CARAFENAIVEBackwardCUDAKernelLauncher(
+int CARAFENAIVEBackwardCUDAKernelLauncher(
     const Tensor top_grad, const Tensor features, const Tensor masks,
     Tensor bottom_grad, Tensor mask_grad, const int kernel_size,
     const int group_size, const int scale_factor);
