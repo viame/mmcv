@@ -88,7 +88,7 @@ class Config:
 
     @staticmethod
     def _validate_py_syntax(filename):
-        with open(filename) as f:
+        with open(filename, 'r') as f:
             content = f.read()
         try:
             ast.parse(content)
@@ -107,7 +107,8 @@ class Config:
             fileBasename=file_basename,
             fileBasenameNoExtension=file_basename_no_extension,
             fileExtname=file_extname)
-        config_file = open(filename).read()
+        with open(filename, 'r') as f:
+            config_file = f.read()
         for key, value in support_templates.items():
             regexp = r'\{\{\s*' + str(key) + r'\s*\}\}'
             value = value.replace('\\', '/')
@@ -120,7 +121,7 @@ class Config:
         filename = osp.abspath(osp.expanduser(filename))
         check_file_exist(filename)
         fileExtname = osp.splitext(filename)[1]
-        if fileExtname not in ['.py', '.json', '.yaml', 'yml']:
+        if fileExtname not in ['.py', '.json', '.yaml', '.yml']:
             raise IOError('Only py/yml/yaml/json type are supported now!')
 
         with tempfile.TemporaryDirectory() as temp_config_dir:
@@ -371,6 +372,15 @@ class Config:
 
     def __iter__(self):
         return iter(self._cfg_dict)
+
+    def __getstate__(self):
+        return (self._cfg_dict, self._filename, self._text)
+
+    def __setstate__(self, state):
+        _cfg_dict, _filename, _text = state
+        super(Config, self).__setattr__('_cfg_dict', _cfg_dict)
+        super(Config, self).__setattr__('_filename', _filename)
+        super(Config, self).__setattr__('_text', _text)
 
     def dump(self, file=None):
         cfg_dict = super(Config, self).__getattribute__('_cfg_dict').to_dict()

@@ -7,8 +7,8 @@ void carafe_naive_forward(Tensor features, Tensor masks, Tensor output,
                           int kernel_size, int group_size, int scale_factor);
 
 void carafe_naive_backward(Tensor top_grad, Tensor features, Tensor masks,
-                           Tensor bottom_grad, Tensor mask_grad, int kernel_size,
-                           int group_size, int scale_factor);
+                           Tensor bottom_grad, Tensor mask_grad,
+                           int kernel_size, int group_size, int scale_factor);
 
 void carafe_forward(Tensor features, Tensor masks, Tensor rfeatures,
                     Tensor routput, Tensor rmasks, Tensor output,
@@ -35,8 +35,8 @@ void deform_conv_backward_input(Tensor input, Tensor offset, Tensor gradOutput,
 
 void deform_conv_backward_parameters(Tensor input, Tensor offset,
                                      Tensor gradOutput, Tensor gradWeight,
-                                     Tensor columns, Tensor ones, int kW, int kH,
-                                     int dW, int dH, int padW, int padH,
+                                     Tensor columns, Tensor ones, int kW,
+                                     int kH, int dW, int dH, int padW, int padH,
                                      int dilationW, int dilationH, int group,
                                      int deformable_group, float scale,
                                      int im2col_step);
@@ -78,19 +78,19 @@ void masked_col2im_forward(const Tensor col, const Tensor mask_h_idx,
                            int width, int channels);
 
 void modulated_deform_conv_forward(
-     Tensor input, Tensor weight, Tensor bias, Tensor ones, Tensor offset,
-     Tensor mask, Tensor output, Tensor columns, int kernel_h, int kernel_w,
-     const int stride_h, const int stride_w, const int pad_h, const int pad_w,
-     const int dilation_h, const int dilation_w, const int group,
-     const int deformable_group, const bool with_bias);
+    Tensor input, Tensor weight, Tensor bias, Tensor ones, Tensor offset,
+    Tensor mask, Tensor output, Tensor columns, int kernel_h, int kernel_w,
+    const int stride_h, const int stride_w, const int pad_h, const int pad_w,
+    const int dilation_h, const int dilation_w, const int group,
+    const int deformable_group, const bool with_bias);
 
 void modulated_deform_conv_backward(
-     Tensor input, Tensor weight, Tensor bias, Tensor ones, Tensor offset,
-     Tensor mask, Tensor columns, Tensor grad_input, Tensor grad_weight,
-     Tensor grad_bias, Tensor grad_offset, Tensor grad_mask, Tensor grad_output,
-     int kernel_h, int kernel_w, int stride_h, int stride_w, int pad_h,
-     int pad_w, int dilation_h, int dilation_w, int group, int deformable_group,
-     const bool with_bias);
+    Tensor input, Tensor weight, Tensor bias, Tensor ones, Tensor offset,
+    Tensor mask, Tensor columns, Tensor grad_input, Tensor grad_weight,
+    Tensor grad_bias, Tensor grad_offset, Tensor grad_mask, Tensor grad_output,
+    int kernel_h, int kernel_w, int stride_h, int stride_w, int pad_h,
+    int pad_w, int dilation_h, int dilation_w, int group, int deformable_group,
+    const bool with_bias);
 
 Tensor nms(Tensor boxes, Tensor scores, float iou_threshold, int offset);
 
@@ -99,10 +99,10 @@ Tensor softnms(Tensor boxes, Tensor scores, Tensor dets, float iou_threshold,
 
 std::vector<std::vector<int> > nms_match(Tensor dets, float iou_threshold);
 
-void roi_align_forward(Tensor input, Tensor rois, Tensor output, Tensor argmax_y,
-                       Tensor argmax_x, int aligned_height, int aligned_width,
-                       float spatial_scale, int sampling_ratio, int pool_mode,
-                       bool aligned);
+void roi_align_forward(Tensor input, Tensor rois, Tensor output,
+                       Tensor argmax_y, Tensor argmax_x, int aligned_height,
+                       int aligned_width, float spatial_scale,
+                       int sampling_ratio, int pool_mode, bool aligned);
 
 void roi_align_backward(Tensor grad_output, Tensor rois, Tensor argmax_y,
                         Tensor argmax_x, Tensor grad_input, int aligned_height,
@@ -121,9 +121,9 @@ void sync_bn_forward_mean(const Tensor input, Tensor mean);
 void sync_bn_forward_var(const Tensor input, const Tensor mean, Tensor var);
 
 void sync_bn_forward_output(const Tensor input, const Tensor mean,
-                            const Tensor var, Tensor running_mean,
-                            Tensor running_var, const Tensor weight,
-                            const Tensor bias, Tensor norm, Tensor std,
+                            const Tensor var, const Tensor weight,
+                            const Tensor bias, Tensor running_mean,
+                            Tensor running_var, Tensor norm, Tensor std,
                             Tensor output, float eps, float momentum,
                             int group_size);
 
@@ -154,6 +154,10 @@ void psamask_backward(Tensor grad_output, const Tensor grad_input,
                       const int psa_type, const int num_, const int h_feature,
                       const int w_feature, const int h_mask, const int w_mask,
                       const int half_h_mask, const int half_w_mask);
+
+void tin_shift_forward(Tensor input, Tensor shift, Tensor output);
+
+void tin_shift_backward(Tensor grad_output, Tensor shift, Tensor grad_input);
 
 Tensor bottom_pool_forward(Tensor input);
 
@@ -299,9 +303,9 @@ PYBIND11_MODULE(TORCH_EXTENSION_NAME, m) {
         py::arg("input"), py::arg("mean"), py::arg("var"));
   m.def("sync_bn_forward_output", &sync_bn_forward_output,
         "sync_bn forward_output", py::arg("input"), py::arg("mean"),
-        py::arg("var"), py::arg("running_mean"), py::arg("running_var"),
-        py::arg("weight"), py::arg("bias"), py::arg("norm"), py::arg("std"),
-        py::arg("output"), py::arg("eps"), py::arg("momentum"),
+        py::arg("var"), py::arg("weight"), py::arg("bias"),
+        py::arg("running_mean"), py::arg("running_var"), py::arg("norm"),
+        py::arg("std"), py::arg("output"), py::arg("eps"), py::arg("momentum"),
         py::arg("group_size"));
   m.def("sync_bn_backward_param", &sync_bn_backward_param,
         "sync_bn backward_param", py::arg("grad_output"), py::arg("norm"),
@@ -329,6 +333,10 @@ PYBIND11_MODULE(TORCH_EXTENSION_NAME, m) {
         py::arg("num_"), py::arg("h_feature"), py::arg("w_feature"),
         py::arg("h_mask"), py::arg("w_mask"), py::arg("half_h_mask"),
         py::arg("half_w_mask"));
+  m.def("tin_shift_forward", &tin_shift_forward, "tin_shift forward",
+        py::arg("input"), py::arg("shift"), py::arg("output"));
+  m.def("tin_shift_backward", &tin_shift_backward, "tin_shift backward",
+        py::arg("grad_output"), py::arg("shift"), py::arg("grad_input"));
   m.def("bottom_pool_forward", &bottom_pool_forward, "Bottom Pool Forward",
         py::arg("input"), py::call_guard<py::gil_scoped_release>());
   m.def("bottom_pool_backward", &bottom_pool_backward, "Bottom Pool Backward",
